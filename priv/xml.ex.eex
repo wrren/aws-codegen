@@ -1,0 +1,151 @@
+# WARNING: DO NOT EDIT, AUTO-GENERATED CODE!
+# See https://github.com/jkakar/aws-codegen for more details.
+
+defmodule <%= context.module_name %> do
+  @moduledoc """
+<%= context.docstring %>
+  """
+  require Record
+  
+  Record.defrecord :xmlElement, Record.extract(:xmlElement, from_lib: "xmerl/include/xmerl.hrl")
+  Record.defrecord :xmlText,    Record.extract(:xmlText, from_lib: "xmerl/include/xmerl.hrl")
+
+  def parse_response!(response) when is_binary(response) do
+    {parsed_doc, _} = :xmerl_scan.string(:erlang.binary_to_list(response), [])
+    
+    parsed_doc
+    |> to_map(%{})
+  end
+
+  def to_map([text], _parent) when Record.is_record(text, :xmlText) do
+    text
+    |> content
+    |> convert
+  end
+
+  def to_map(elements, parent) when is_list(elements) do
+    if unique_names?(elements) do
+      elements
+      |> Enum.reduce(parent, fn(element, out) -> 
+        case to_map(element, out) do
+          val when is_map(val) -> 
+            val
+          _ -> 
+            out
+        end
+      end)
+    else
+      elements
+      |> Enum.map(fn(element) -> to_map(element, %{}) end)
+      |> Enum.filter(fn nil -> false; _ -> true end)
+    end
+  end
+
+  def to_map(element, parent) when Record.is_record(element, :xmlElement) do
+    name    = xmlElement(element, :name)
+    content = xmlElement(element, :content)
+    Map.put(parent, Atom.to_string(name), to_map(content, %{}))
+  end
+
+  def to_map(element, _parent) when Record.is_record(element, :xmlText) do
+    case String.trim(content(element)) do
+      ""    -> nil
+      value -> convert(value)
+    end
+  end
+
+  def convert(value) do
+    [
+      &:erlang.binary_to_integer/1,
+      &:erlang.binary_to_float/1,
+      &NaiveDateTime.from_iso8601!/1,
+      fn "true" -> true; "false" -> false; _ -> raise ArgumentException end
+    ]
+    |> Enum.reduce_while(value, fn(converter, val) ->
+      try do
+        {:halt, converter.(val)}
+      rescue
+        _ -> {:cont, val}
+      catch
+        _ -> {:cont, val}
+      end
+    end)
+  end
+
+  def name(element) when Record.is_record(element, :xmlElement) do
+    Atom.to_string(xmlElement(element, :name))
+  end
+
+  def name(_element) do
+    nil
+  end
+
+  def content(element) when Record.is_record(element, :xmlElement) do
+    xmlElement(element, :content)
+  end
+
+  def content(element) when Record.is_record(element, :xmlText) do
+    :erlang.list_to_binary(xmlText(element, :value))
+  end
+
+  defp unique_names?(elements) do
+    names = elements
+    |> Enum.map(&__MODULE__.name/1)
+    |> Enum.filter(fn nil -> false; _ -> true end)
+
+    if Enum.any?(names, fn "item" -> true; _ -> false end) do
+      false
+    else
+      length(names) == length(Enum.uniq(names))
+    end
+  end
+
+<%= for action <- context.actions do %>
+  @doc """
+<%= action.docstring %>
+  """
+  def <%= action.function_name %>(client, input \\ %{}, options \\ []) do
+    request(client, "<%= action.name %>", input, options)
+  end
+<% end %>
+  @spec request(map(), binary(), map(), list()) ::
+    {:ok, Poison.Parser.t | nil, Poison.Response.t} |
+    {:error, Poison.Parser.t} |
+    {:error, HTTPoison.Error.t}
+  defp request(client, action, input, options) do
+    client = %{client | service: "<%= context.endpoint_prefix %>"}
+    host = get_host("<%= context.endpoint_prefix %>", client)
+    url = get_url(host, client)
+    headers = [{"Host", host},
+               {"Content-Type", "application/x-amz-json-<%= context.json_version %>"},
+               {"X-Amz-Target", "<%= context.target_prefix %>.#{action}"}]
+    payload = Poison.Encoder.encode(input, [])
+    headers = AWS.Request.sign_v4(client, "POST", url, headers, payload)
+    case HTTPoison.post(url, payload, headers, options) do
+      {:ok, response=%HTTPoison.Response{status_code: 200, body: ""}} ->
+        {:ok, nil, response}
+      {:ok, response=%HTTPoison.Response{status_code: 200, body: body}} ->
+        {:ok, parse_response!(body), response}
+      {:ok, _response=%HTTPoison.Response{body: body}} ->
+        error = Poison.Parser.parse!(body)
+        exception = error["__type"]
+        message = error["message"]
+        {:error, {exception, message}}
+      {:error, %HTTPoison.Error{reason: reason}} ->
+        {:error, %HTTPoison.Error{reason: reason}}
+    end
+  end
+  
+  defp get_host(endpoint_prefix, client) do
+    if client.region == "local" do
+      "localhost"
+    else
+      "#{endpoint_prefix}.#{client.region}.#{client.endpoint}"
+    end
+  end
+
+  defp get_url(host, %{:proto => proto, :port => port}) do
+    "#{proto}://#{host}:#{port}/"
+  end
+
+end
