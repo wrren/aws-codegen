@@ -24,7 +24,11 @@ defmodule <%= context.module_name %> do
   end
 
   def to_map(elements, parent) when is_list(elements) do
-    if unique_names?(elements) do
+    if dummy_names?(elements) do
+      elements
+      |> Enum.map(fn(element) -> to_map(element, %{}) end)
+      |> Enum.filter(fn nil -> false; _ -> true end)
+    else
       elements
       |> Enum.reduce(parent, fn(element, out) -> 
         case to_map(element, out) do
@@ -34,10 +38,6 @@ defmodule <%= context.module_name %> do
             out
         end
       end)
-    else
-      elements
-      |> Enum.map(fn(element) -> to_map(element, %{}) end)
-      |> Enum.filter(fn nil -> false; _ -> true end)
     end
   end
 
@@ -88,18 +88,13 @@ defmodule <%= context.module_name %> do
     :erlang.list_to_binary(xmlText(element, :value))
   end
 
-  defp unique_names?(elements) do
-    names = elements
+  defp dummy_names?(elements) do
+    elements
     |> Enum.map(&__MODULE__.name/1)
     |> Enum.filter(fn nil -> false; _ -> true end)
-
-    if Enum.any?(names, fn "item" -> true; _ -> false end) do
-      false
-    else
-      length(names) == length(Enum.uniq(names))
-    end
+    |> Enum.all?(fn name -> String.at(name, 0) >="a" and String.at(name, 0) <= "z" end)
   end
-
+  
 <%= for action <- context.actions do %>
   @doc """
 <%= action.docstring %>
@@ -135,7 +130,7 @@ defmodule <%= context.module_name %> do
         {:error, %HTTPoison.Error{reason: reason}}
     end
   end
-  
+
   defp get_host(endpoint_prefix, client) do
     if client.region == "local" do
       "localhost"
